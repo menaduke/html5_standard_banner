@@ -4,6 +4,8 @@ It iterates through the assets folders for each size, and creates an
 assets.css file in the each src folders with the proper ID selectors, 
 size, positioning, and background image for each asset.
 */
+//custom add
+var rimraf = require('rimraf');
 
 // Include gulp (http://gulpjs.com/)
 var gulp = require('gulp');
@@ -90,49 +92,139 @@ function uniq(a) {
 //cache to the current main.css file, and generates changed selectors
 gulp.task('default', function() {
 
-    sourceFolders = getFolders(assetsPath);
+    //custom script to remove all .cache files from folders
 
-    sourceFolders.map(function(folder) {
-        var imgCache = path.join(assetsPath,folder,'/.cache');
-        
-        var stream = streamqueue({
-                    objectMode: true
-                },
-                gfile('header', '\n', {
-                    src: true
-                }),
-                gulp.src(path.join(assetsPath, folder, '/*.png'))
-                /**/
-                .pipe(gulpTrimPng())
-                .pipe(changed(imgCache + '/img',{hasChanged:changed.compareSha1Digest}))
-                .pipe(gulp.dest(imgCache + '/img'))
-                .pipe(pngmin([256]))
-                .pipe(gulp.dest(path.join(sourcePath, folder + '/img')))
-                .pipe(gulpImg())
-                .pipe(concat('assetList')),
-                gulp.src(path.join(assetsPath, folder, '/*.{gif,jpg}'))
-                .pipe(gulp.dest(path.join(sourcePath, folder + '/img')))
-                .pipe(changed(imgCache + '/img',{hasChanged:changed.compareSha1Digest}))
-                .pipe(gulp.dest(imgCache + '/img'))
-                .pipe(gulpImg())
-                .pipe(concat('assetList')),
-                gulp.src(path.join(assetsPath, folder, '/*.svg'))
-                .pipe(changed(imgCache + '/img',{hasChanged:changed.compareSha1Digest}))
-                .pipe(svgmin())
-                .pipe(gulp.dest(path.join(sourcePath, folder + '/img')))
-                .pipe(gulp.dest(imgCache + '/img')) 
-                .pipe(gulpImg())
-                .pipe(concat('assetList'))
-                //gfile('footer', '}', {
-                //    src: true
-               //})
-            )
-            .pipe(concat('main_cache.css')).pipe(gulp.dest(path.join(assetsPath, folder + '/.cache/css/')));
-            
-            stream.on('end',function(){
-               pushNew(path.join(assetsPath,folder),path.join(sourcePath,folder));
+    
+    function initRemoveAndPutBackCacheFolder() {
+        console.log('==========BEGIN REMOVE .cache============')
+        let firstListData;
+        let firstPromise = new Promise((resolve, reject) => {
+            firstListData = fs.readdirSync('../assets', { encoding: 'utf8'})
+            // console.log('hello1');
+            resolve();
+        }).then(() => {
+            let fLData = firstListData.filter(names => names !== '.DS_Store');
+            //once you get the list of data from the first list then do a comparison for the rest
+            // console.log('hello2', fLData);
+            let listTwo =[];
+            fLData.forEach(names => {
+                let getListForSizesFolders = fs.readdirSync('../assets/'+names).filter(names => names !== '.DS_Store');
+                listTwo.push(getListForSizesFolders);
             });
+            return { folderTwo: listTwo,
+                        folderOne: fLData
+            }
+        }).then(({ folderTwo, folderOne}) =>{
+            //only return a list of folder 1 that contain .cache folder
+            let tracker = {};
+            let arrayTracker = [];
+            folderTwo.forEach((anotherArray, index, array) => {
+                anotherArray.forEach(item => {
+                    if(item === '.cache') {
+                        // tracker[folderOne[index]] = 1;
+                        arrayTracker.push(folderOne[index]);
+                    }
+                })
+            });
+            return arrayTracker;
+        }).then((tracked)=>{
+            //returns list of items that have .cache file
+            // console.log('hello5', tracked);
+            if(tracked) {
+                tracked.forEach(folderName => {
+                    console.log('REMOVING', folderName);
+                    rimraf.sync(`../assets/${folderName}/.cache`,{}, function () { console.log(folderName, 'done removing .cache'); });
+                    if (!fs.existsSync(`../assets/${folderName}/.cache`)){
+                        console.log(`../assets/${folderName}/.cache`, 'did not exist creating now!')
+                        fs.mkdirSync(`../assets/${folderName}/.cache`);
+                        fs.mkdirSync(`../assets/${folderName}/.cache/img`);
+                    }
+                })
+            }
+        }).then(()=>{
+            console.log('SUCCESSFULLY REMOVED .CACHE from ../assets/**/.cache')
+        }).catch((err) => {
+            console.log("ERROR:", err);
+        })
+    }
+
+    //will not probably need this function below
+    function initRemoveAndPutBackImgSrcFolder() {
+        new Promise((resolve, reject) => {
+            let srcFolders = fs.readdirSync('../src', { encoding: 'utf8'});
+            resolve(srcFolders.filter(item => item !== '.DS_Store'));
+        }).then((srcFolders) => {
+            console.log('FOLDERS FROM SRC!!!!', srcFolders)
+            // srcFolders.forEach(folderNameSrc => {
+            //     rimraf.sync(`../src/${folderNameSrc}/img`,{}, function () { console.log(folderNameSrc, 'done removing .cache'); });
+            //     if (!fs.existsSync(`../src/${folderNameSrc}/img`)){
+            //         console.log(`../src/${folderNameSrc}/img`, 'did not exist creating now!')
+            //         fs.mkdirSync(`../src/${folderNameSrc}/img`);
+            //         fs.mkdirSync(`../src/${folderNameSrc}/img`);
+            //     }
+            // })
+        })
+        .catch((err) => {
+            console.log("ERROR occurred in initRemoveAndPutBackImgSrcFolder - catch()")
+            console.log("ERROR:", err)
+        })
+        // rimraf.sync('../src/')
+    }
+    
+    new Promise((resolve, reject) => {
+        initRemoveAndPutBackCacheFolder();
+        console.log('removed and put back in!')
+        resolve();
+    }).then(()=>{
+        // remove img folder
+        // initRemoveAndPutBackImgSrcFolder();
+    }).then(() => {
+        console.log('getting to next')
+        sourceFolders = getFolders(assetsPath);
+        
+            sourceFolders.map(function(folder) {
+                var imgCache = path.join(assetsPath,folder,'/.cache');
+                
+                var stream = streamqueue({
+                            objectMode: true
+                        },
+                        gfile('header', '\n', {
+                            src: true
+                        }),
+                        gulp.src(path.join(assetsPath, folder, '/*.png'))
+                        /**/
+                        .pipe(gulpTrimPng())
+                        .pipe(changed(imgCache + '/img',{hasChanged:changed.compareSha1Digest}))
+                        .pipe(gulp.dest(imgCache + '/img'))
+                        .pipe(pngmin([256]))
+                        .pipe(gulp.dest(path.join(sourcePath, folder + '/img')))
+                        .pipe(gulpImg())
+                        .pipe(concat('assetList')),
+                        gulp.src(path.join(assetsPath, folder, '/*.{gif,jpg}'))
+                        .pipe(gulp.dest(path.join(sourcePath, folder + '/img')))
+                        .pipe(changed(imgCache + '/img',{hasChanged:changed.compareSha1Digest}))
+                        .pipe(gulp.dest(imgCache + '/img'))
+                        .pipe(gulpImg())
+                        .pipe(concat('assetList')),
+                        gulp.src(path.join(assetsPath, folder, '/*.svg'))
+                        .pipe(changed(imgCache + '/img',{hasChanged:changed.compareSha1Digest}))
+                        .pipe(svgmin())
+                        .pipe(gulp.dest(path.join(sourcePath, folder + '/img')))
+                        .pipe(gulp.dest(imgCache + '/img')) 
+                        .pipe(gulpImg())
+                        .pipe(concat('assetList'))
+                        //gfile('footer', '}', {
+                        //    src: true
+                       //})
+                    )
+                    .pipe(concat('main_cache.css')).pipe(gulp.dest(path.join(assetsPath, folder + '/.cache/css/')));
+                    
+                    stream.on('end',function(){
+                       pushNew(path.join(assetsPath,folder),path.join(sourcePath,folder));
+                    });
+            })
     })
+
 });
 
 //watch for changes in any files and continuously 
@@ -295,7 +387,7 @@ function addToDOM(assetsDir,srcDir,newSelectors){
 
             DOMarray = data.split(/(<!-- \*\*AUTO DIV START\*\* -->)/);
                      
-            newSelectors.forEach(function(sel){
+            newSelectors.reverse().forEach(function(sel){
                 // console.log(sel.replace('#',''))
                 // console.log(data.indexOf(sel.replace('#','')))
                 var sel = "id=\"" + sel.replace('#','') + '\"';
